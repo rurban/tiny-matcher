@@ -3,6 +3,9 @@
  * Dynamic (no compilation), bounded recursive.
  * This variant uses heap memory and the string stdlib.
  *
+ * There should be variants for embedded without malloc
+ * and the string lib.
+ *
  * Written by Reini Urban 2003.
  * MIT License
  *
@@ -14,7 +17,12 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h> 
+#include <ctype.h>
+#if defined _UNICODE
+  #include <locale.h>
+#elseif defined _UTF8
+  #include "utf8.h"
+#endif
 
 /* this is just for standalone testing */
 #include <stdarg.h>
@@ -48,41 +56,61 @@ int patmatch(const char *pattern, char *data)
     int groupcounter = patmatch_groupcounter;
 
     dbg_log(LOG_DEBUG, " >>> \"%s\" =~ /%s/\n", data, pattern);
-    switch (toupper(*pattern))
+    switch (*pattern)
 	{
 	case '\0':
 	    dbg_log(LOG_DEBUG, " !>>> \"%s\" => %s\n", data, !*data ? "OK" : "FAIL");
 	    return !*data;
 	    
-	case ' ':
-	case '-':
+	//case ' ':
+	//case '-':
 	    /* Ignore these characters in the pattern */
-	    return *data && patmatch(pattern+1, data);
+	    //return *data && patmatch(pattern+1, data);
 
-	case '.' : /* wildcard as '*' in glob(). Match any sequence of characters. 0 or more */
+	case '*' : /* Match any sequence of characters. 0 or more. */
 	    prev = *pattern;
 	    if (! *(pattern+1) ) 
 		return 1; /* return *data; => match one or more */
+	    else if (*(pattern+1) == '?') // TODO non-greedy
+		return patmatch(pattern+2, data) || (*data && patmatch(pattern, data+1));
+	    else
+		return patmatch(pattern+1, data) || (*data && patmatch(pattern, data+1));
+	case '+' : /* Match 1 or more, greedy or non-greedy. */
+	    prev = *pattern;
+	    if (! *(pattern+1) ) 
+		return *data;
+	    else if (*(pattern+1) == '?') // TODO non-greedy
+		return patmatch(pattern+2, data) || (*data && patmatch(pattern, data+1));
 	    else
 		return patmatch(pattern+1, data) || (*data && patmatch(pattern, data+1));
 
-	    /* wildcard character: Match any char */
-	case '?' :
+	/* wildcard character: Match any char */
+	case '.' :
 	    prev = *pattern;
 	    return *data && patmatch(pattern+1, data+1);
 
-	case 'X': /* 0-9 */
+	case '\\': 
 	    prev = *pattern;
-	    return ((*data >= '0') && (*data <= '9')) && patmatch(pattern+1, data+1);
+	    switch (*(pattern+1)) {
+	    case 'd': /* 0-9 */
+		return isdigit(*data) && patmatch(pattern+1, data+1);
+	    case 'D': /* ^0-9 */
+		return !isdigit(*data) && patmatch(pattern+1, data+1);
+	    case 's': /* whitespace */
+		return isspace(*data) && patmatch(pattern+1, data+1);
+	    case 'S': /* ^whitespace */
+		return !isspace(*data) && patmatch(pattern+1, data+1);
+	    case 'w': /* word */
+		return isalnum(*data) && patmatch(pattern+1, data+1);
+	    case 'W': /* ^word */
+		return !isalnum(*data) && patmatch(pattern+1, data+1);
+	    case 'x': /* ^word */
+		return !isalnum(*data) && patmatch(pattern+1, data+1);
+	    default:
+		return *data == '\\' && patmatch(pattern+1, data+1);
+	    }
+	    break;
 	    
-	case 'Z': /* 1-9 */
-	    prev = *pattern;
-	    return ((*data >= '1') && (*data <= '9')) && patmatch(pattern+1, data+1);
-	    
-	case 'N': /* 2-9 */
-	    prev = *pattern;
-	    return ((*data >= '2') && (*data <= '9')) && patmatch(pattern+1, data+1);
-
 	case '{': /* quantifier {n[,m]} */
 	    {
 		char *comma;
@@ -327,9 +355,9 @@ int patmatch(const char *pattern, char *data)
 	    }
 	    break;
 	    
-	default  :
+	default:
 	    prev = *pattern;
-	    return (toupper(*pattern) == toupper(*data)) && patmatch(pattern+1, data+1);
+	    return *pattern == *data && patmatch(pattern+1, data+1);
 	}
     return 0;
 }
@@ -369,16 +397,16 @@ int match(char *pattern, char *data)
 
 int testmatch(char *pattern, char *data, int should)
 {
-    int match;
+    int ret;
 
-    match = match(pattern, data);
-    if (should == match) {
+    ret = match(pattern, data);
+    if (should == ret) {
 	printf("OK\n");
     } else {
 	printf("FAIL\n");
 	exit(-1);
     }
-    return match;
+    return ret;
 }
 
 int main () {
@@ -388,46 +416,44 @@ int main () {
     /* plain strcmp */
     testmatch("0316890002",data1,1);
     /* simple regex with ending . */
-    testmatch("_0N.",data1,1);
+    testmatch("0\\d+",data1,1);
     /* not terminating . */
-    testmatch("_0N.0",data1,0);
+    testmatch("0\\d.0",data1,0);
 #if 1
-    testmatch("_0N. 8500",data1,0);
-    testmatch("_0N. 8500",data2,1);
-    testmatch("_0[2-9]. 8500",data2,1);
+    testmatch("0\\d. 8500",data1,0);
+    testmatch("0\\d. 8500",data2,1);
+    testmatch("0[2-9]. 8500",data2,1);
     /* ranges */
-    testmatch("_[a-z]o[0-9a-z].","voicemail",1);
-    testmatch("_[0]o[0-9a-z].","voicemail",0);
+    testmatch("[a-z]o[0-9a-z].","voicemail",1);
+    testmatch("[0]o[0-9a-z].","voicemail",0);
 
     /* negation */
-    testmatch("_[^0-9]o.","voicemail",1);
-    testmatch("_[^x]o.","voicemail",1);
-    testmatch("_[^v]o.","voicemail",0);
-    testmatch("_[^a-z]o.","voicemail",0);
+    testmatch("[^0-9]o.","voicemail",1);
+    testmatch("[^x]o.","voicemail",1);
+    testmatch("[^v]o.","voicemail",0);
+    testmatch("[^a-z]o.","voicemail",0);
 #endif
     /* quantifiers */
-    testmatch("_0316890{2}N","0316890002",0);
-    testmatch("_0316890{3}N","0316890002",1);
-    testmatch("_0316890{1,}N","0316890002",1);
-    testmatch("_0316890{1,3}N","0316890002",1);
-    testmatch("_0316890{4,5}N","0316890002",0);
+    testmatch("0316890{2}\\d","0316890002",0);
+    testmatch("0316890{3}\\d","0316890002",1);
+    testmatch("0316890{1,}\\d","0316890002",1);
+    testmatch("0316890{1,3}\\d","0316890002",1);
+    testmatch("0316890{4,5}\\d","0316890002",0);
     /* grouping and capturing */
-    testmatch("_031689(0XX)N","0316890002",1);
-    testmatch("_031689(0X9)N","0316890002",0);
-    testmatch("_031689(X){1,3}N","0316890002",1);
-    testmatch("_031689(X){4,3}N","0316890002",0);
-    testmatch("_031689(X){3}N","0316890002",1);
-    testmatch("_031689(X){4}","0316890002",1);
-    testmatch("_031689(X){5}","0316890002",0);
-    testmatch("_031689(0){3}N","0316890002",1);
-    testmatch("_031689(X){4}N","0316890002",0);
-    testmatch("_031689(X){4}N","03168900021",0);
-    testmatch("_031689(X){4}Z","03168900021",1);
-    testmatch("_031689(XX){2}Z","03168900021",1);
+    testmatch("031689(0\\d\\d)\\d","0316890002",1);
+    testmatch("031689(0\\d9)\\d","0316890002",0);
+    testmatch("031689(\\d){1,3}\\d","0316890002",1);
+    testmatch("031689(\\d){4,3}\\d","0316890002",0);
+    testmatch("031689(\\d){3}\\d","0316890002",1);
+    testmatch("031689(\\d){4}","0316890002",1);
+    testmatch("031689(\\d){5}","0316890002",0);
+    testmatch("031689(0){3}\\d","0316890002",1);
+    testmatch("031689(\\d){4}\\d","0316890002",0);
+    testmatch("031689(\\d){4}\\d","03168900021",0);
+    testmatch("031689(\\d){4}[1-9]","03168900021",1);
+    testmatch("031689(\\d\\d){2}[1-9]","03168900021",1);
     /* alternation */
-    testmatch("_(032|02)N.","0316890002",0);
-#if 1
-    testmatch("_(031N|0)N.","0316890002",1); /* not yet supported */
-#endif
+    testmatch("(032|02)\\d.","0316890002",0);
+    testmatch("(031\\d|0)\\d.","0316890002",1);
 }
 
