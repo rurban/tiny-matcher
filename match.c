@@ -104,21 +104,29 @@ int patmatch(const char *pattern, char *data)
 	    prev = *pattern;
 	    switch (*(pattern+1)) {
 	    case 'd': /* 0-9 */
-		return isdigit(*data) && patmatch(pattern+1, data+1);
+		return isdigit(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 'D': /* ^0-9 */
-		return !isdigit(*data) && patmatch(pattern+1, data+1);
+		return !isdigit(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 's': /* whitespace */
-		return isspace(*data) && patmatch(pattern+1, data+1);
+		return isspace(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 'S': /* ^whitespace */
-		return !isspace(*data) && patmatch(pattern+1, data+1);
+		return !isspace(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 'w': /* word */
-		return isalnum(*data) && patmatch(pattern+1, data+1);
+		return isalnum(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 'W': /* ^word */
-		return !isalnum(*data) && patmatch(pattern+1, data+1);
+		return !isalnum(*data) &&
+		    patmatch(pattern+2, data+1);
 	    case 'x': /* ^word */
-		return !isalnum(*data) && patmatch(pattern+1, data+1);
+		return !isalnum(*data) &&
+		    patmatch(pattern+2, data+1);
 	    default:
-		return *data == '\\' && patmatch(pattern+1, data+1);
+		return *data == '\\' &&
+		    patmatch(pattern+2, data+1);
 	    }
 	    break;
 	    
@@ -173,12 +181,12 @@ int patmatch(const char *pattern, char *data)
 			    data--;
 			}
 			dbg_log(LOG_DEBUG, ">>> check for repeated pattern{%d,%d} of group '%s' in data '%s'\n", from, to, group, data);
-			strcat(group,".");
+			strcat(group,"+");
 		    } else {
 			dbg_log(LOG_DEBUG, ">>> check for repeated pattern{%d,%d} in previous character '%c'\n", from, to, prev);
 			data--;
 			group[0] = prev;
-			group[1] = '.';
+			group[1] = '+';
 			group[2] = '\0';
 		    }
 		    *tmp = prev;
@@ -387,7 +395,6 @@ static int patmatch_repeated(const char *pattern, char *data, const int num)
     return 1;
 }
 
-
 int match(char *pattern, char *data)
 {
     int match;
@@ -431,20 +438,20 @@ int main () {
     /* simple regex with ending . */
     testmatch("0\\d+",data1,1);
     /* not terminating . */
-    testmatch("0\\d.0",data1,0);
+    testmatch("0\\d+0",data1,0);
 #if 1
-    testmatch("0\\d. 8500",data1,0);
-    testmatch("0\\d. 8500",data2,1);
-    testmatch("0[2-9]. 8500",data2,1);
+    testmatch("0\\d+8500",data1,0);
+    testmatch("0\\d+8500",data2,1);
+    testmatch("0[2-9]+0+8500",data2,1);
     /* ranges */
-    testmatch("[a-z]o[0-9a-z].","voicemail",1);
-    testmatch("[0]o[0-9a-z].","voicemail",0);
+    testmatch("[a-z]o[0-9a-z]+","voicemail",1);
+    testmatch("[0]o[0-9a-z]+","voicemail",0);
 
     /* negation */
-    testmatch("[^0-9]o.","voicemail",1);
-    testmatch("[^x]o.","voicemail",1);
-    testmatch("[^v]o.","voicemail",0);
-    testmatch("[^a-z]o.","voicemail",0);
+    testmatch("[^0-9]o+","voicemail",1);
+    testmatch("[^x]o+","voicemail",1);
+    testmatch("[^v]o+","voicemail",0);
+    testmatch("[^a-z]o+","voicemail",0);
 #endif
     /* quantifiers */
     testmatch("0316890{2}\\d","0316890002",0);
