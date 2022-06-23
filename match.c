@@ -13,10 +13,11 @@
  * http://www.cs.umu.se/~isak/Snippets/xstrcmp.c
  */
 
+// strsep
+#define _DEFAULT_SOURCE
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <ctype.h>
 #if defined _UNICODE
   #include <locale.h>
@@ -24,7 +25,12 @@
   #include "utf8.h"
 #endif
 
+#if defined DEBUG || defined TEST
+#include <stdio.h>
+#endif
+
 /* this is just for standalone testing */
+#ifdef DEBUG
 #include <stdarg.h>
 #define LOG_WARNING 3
 #define LOG_DEBUG   0
@@ -38,6 +44,9 @@ void dbg_log(int level, const char *fmt, ...) {
     va_end(ap);
     fflush(stdout);
 }
+#else
+#define dbg_log(...)
+#endif
 /* end of standalone test functions */
 
 int  patmatch_groupcounter = 0;
@@ -53,7 +62,9 @@ int patmatch(const char *pattern, char *data)
     static char prev = '\0';
     static char groupdata[80] = "";
     static char *group = patmatch_group;
+#ifdef AST_PBX_MAX_STACK
     int groupcounter = patmatch_groupcounter;
+#endif
 
     dbg_log(LOG_DEBUG, " >>> \"%s\" =~ /%s/\n", data, pattern);
     switch (*pattern)
@@ -186,8 +197,8 @@ int patmatch(const char *pattern, char *data)
 			    groupdata[l+1] = '\0';
 			    dbg_log(LOG_DEBUG, "  >>>>> end of group '%s', data: %s\n", group, groupdata);
 			    /* capture the found data in variables $1, $2, ... */
-			    sprintf(name,"%d",++groupcounter);
 #ifdef AST_PBX_MAX_STACK
+			    sprintf(name,"%d",++groupcounter);
 			    pbx_builtin_setvar_helper(NULL,name,groupdata);
 #endif
 			    dbg_log(LOG_DEBUG, "  >>>>> global variable $%s set to '%s'\n", name, groupdata);
@@ -276,8 +287,8 @@ int patmatch(const char *pattern, char *data)
 		    *(group+strlen(group)-1) = '\0';
 		    dbg_log(LOG_DEBUG, ">>> end of group '%s', data: %s\n", group, groupdata);
 		    /* capture the found data in variables $1, $2, ... */
-		    sprintf(name,"%d",++groupcounter);
 #ifdef AST_PBX_MAX_STACK
+		    sprintf(name,"%d",++groupcounter);
 		    pbx_builtin_setvar_helper(NULL,name,groupdata);
 #endif
 		    dbg_log(LOG_DEBUG, ">>> global variable $%s set to '%s'\n", name, groupdata);
@@ -395,6 +406,8 @@ int match(char *pattern, char *data)
     return match;
 }
 
+#ifdef TEST
+
 int testmatch(char *pattern, char *data, int should)
 {
     int ret;
@@ -457,3 +470,4 @@ int main () {
     testmatch("(031\\d|0)\\d.","0316890002",1);
 }
 
+#endif
