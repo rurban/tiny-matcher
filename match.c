@@ -158,7 +158,7 @@ int patmatch(const char *pattern, char *data)
 			    tmp[border-cpos+1] = '\0';
 			    to = atoi(tmp);
 			} else { /* {f,} */
-			    to = strlen(data); /* may fail if after the group are more pattern chars */
+			    to = strlen(data) + 1; /* may fail if after the group are more pattern chars */
 			    if (*(pattern+border+1)) {
 				to = to - strlen(pattern+border+1) + 1;
 			    }
@@ -190,14 +190,16 @@ int patmatch(const char *pattern, char *data)
 			group[2] = '\0';
 		    }
 		    *tmp = prev;
+                    // this is the longest match. for shortest match switch direction
 		    for (i=to; i>=from; i--) {
-			if (patmatch_repeated(group,data,i)) break;
+			if (patmatch_repeated(group,data,i))
+                            break;
 		    }
 		    prev = *tmp;
 		    if (i >= from || !from) { /* if found */
 			dbg_log(LOG_DEBUG, " >>>> found '%s' in data '%s' after %d runs\n", group, data, i);
 			char name[16];
-			data = data + (i * (strlen(group)- 1)) - 1;
+			data += (i * (strlen(group) - 1) - 1);
 			int l = strlen(groupdata) - strlen(data);
 			/* data = data-i+from-1; */		/* possible failure here! */
 			if (prev == ')') {			/* grouping => capture */
@@ -265,7 +267,8 @@ int patmatch(const char *pattern, char *data)
 		    strcpy(sepcopy,sep);
 		    strcat(sepcopy,pattern+border+1);
 		    dbg_log(LOG_DEBUG, "  >>>> alternative '%s' =~ /%s/\n", sepcopy, data);
-		    if (patmatch(sepcopy, data)) break;
+		    if (patmatch(sepcopy, data))
+                        break;
 		    if (!*data) { 
 			sep = NULL; break; 
 		    }
@@ -316,7 +319,8 @@ int patmatch(const char *pattern, char *data)
 		s = strdup(group);
 		while (sep = strsep(&s,"|")) {
 		    dbg_log(LOG_DEBUG, "  >>>> alternative %d\n", sep);
-		    if (patmatch(sep, data)) break;
+		    if (patmatch(sep, data))
+                        break;
 		    if (!*data) { 
 			*sep = '\0'; break; 
 		    }
@@ -386,10 +390,12 @@ static int patmatch_repeated(const char *pattern, char *data, const int num)
 {
     int i;
     dbg_log(LOG_DEBUG, "  >>> try %d repetitions of '%s' in data '%s'\n", num, pattern, data);
-    if (num <= 0) return 0;
+    if (num <= 0)
+        return 0;
     for (i=1; i<=num; i++) {
 	dbg_log(LOG_DEBUG, "  >>>> round %d with data %s\n", i, data);
-	if (!patmatch(pattern, data)) return 0;
+	if (!patmatch(pattern, data))
+            return 0;
 	data = data + strlen(pattern) - 1;
     }
     return 1;

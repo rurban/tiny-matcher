@@ -5,7 +5,7 @@ CFLAGS := -g -Wall -Wextra -std=c99 -DDEBUG
 all: test1
 
 test1: match.c
-	@$(CC) -I. $(CFLAGS) match.c -DTEST -o $@
+	$(CC) -I. $(CFLAGS) match.c -DTEST -o $@
 
 test: all 
 	@./test1
