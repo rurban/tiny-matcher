@@ -1,10 +1,10 @@
 /*
  * A tiny regular-expression pattern matcher.
  * Dynamic (no compilation), bounded recursive.
- * This variant uses heap memory and the string stdlib.
  *
+ * This variant uses heap memory and the string stdlib.
  * There should be variants for embedded without malloc
- * and the string lib.
+ * and the string lib. And UTF-8 multibyte support.
  *
  * Written by Reini Urban 2003.
  * MIT License
@@ -95,7 +95,7 @@ int patmatch(const char *pattern, char *data)
 	    else
 		return patmatch(pattern+1, data) || (*data && patmatch(pattern, data+1));
 
-	/* wildcard character: Match any char */
+	/* wildcard character: Match any char. TODO also \r\n? */
 	case '.' :
 	    prev = *pattern;
 	    return *data && patmatch(pattern+1, data+1);
@@ -121,9 +121,11 @@ int patmatch(const char *pattern, char *data)
 	    case 'W': /* ^word */
 		return !isalnum(*data) &&
 		    patmatch(pattern+2, data+1);
-	    case 'x': /* ^word */
+            #if 0
+            case 'x': /* hex */
 		return !isalnum(*data) &&
 		    patmatch(pattern+2, data+1);
+            #endif
 	    default:
 		return *data == '\\' &&
 		    patmatch(pattern+2, data+1);
@@ -385,6 +387,20 @@ int patmatch(const char *pattern, char *data)
     return 0;
 }
 
+static int pattern_len (const char *pattern)
+{
+    char *p;
+    if ((p = strchr(pattern, '\\'))) {
+        if (!*p)
+            return strlen(pattern);
+        if (*(p+1) == 'd' || *(p+1) == 'D' || *(p+1) == 'w' || *(p+1) == 'W' || *(p+1) == 's' || *(p+1) == 's')
+            return (p - pattern) + pattern_len(p+1);
+        //if (*(p+1) == 'x' && ishex(*(p+2)) && ishex(*(p+3)) )
+        //     return (p - pattern) + pattern_len(p+3);
+    }
+    return strlen(pattern);
+}
+
 /* try exactly num repetitions, from high to from */
 static int patmatch_repeated(const char *pattern, char *data, const int num) 
 {
@@ -392,11 +408,15 @@ static int patmatch_repeated(const char *pattern, char *data, const int num)
     dbg_log(LOG_DEBUG, "  >>> try %d repetitions of '%s' in data '%s'\n", num, pattern, data);
     if (num <= 0)
         return 0;
-    for (i=1; i<=num; i++) {
-	dbg_log(LOG_DEBUG, "  >>>> round %d with data %s\n", i, data);
-	if (!patmatch(pattern, data))
-            return 0;
-	data = data + strlen(pattern) - 1;
+    else {
+        const int l = pattern_len(pattern) - 1; // minus the final +
+        dbg_log(LOG_DEBUG, "  >>>> pattern_len(%s) => %d\n", pattern, l);
+        for (i=1; i<=num; i++) {
+            dbg_log(LOG_DEBUG, "  >>>> round %d with data %s\n", i, data);
+            if (!patmatch(pattern, data))
+                return 0;
+            data += l;
+        }
     }
     return 1;
 }
